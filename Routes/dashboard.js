@@ -4,7 +4,7 @@ const dashboardController = async (req, res) => {
         error: null,
         data: {
             title: "My dashboard",
-            content: "dashboard contents",
+            content: "dashboard conten",
             user: req.user,
         },
     });
