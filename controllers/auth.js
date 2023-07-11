@@ -1,75 +1,79 @@
 const User = require('../modelSchema/userSchema');
 const { registerValidation, loginValidation } = require('../validation/registerValidation');
+
 const bcrypt = require("bcryptjs");
+
 const jwt = require("jsonwebtoken");
 
 // register Controller
 const registerController = async (req, res) => {
+  const { error } = registerValidation(req.body);
+  const users = req.body;
 
-    const { error } = registerValidation(req.body);
-    
-    if (error) return res.status(400).json({ error: error.details[0].message });
+  // if (!error.email || !error.password ||!error.name ) {
+  //   return res.status(400).send({message : "Username,email and password are required."});
+  // }
+  if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const isEmailExist = await User.findOne({ email: req.body.email });
 
-    // email already registered
-    if (isEmailExist)
-        return res.status(400).json({ error: "Email already exists" });
+  const saltRounds = 10;
 
-    const saltRounds = 10;
+  const salt = await bcrypt.genSalt(saltRounds);
 
-    const salt = await bcrypt.genSalt(saltRounds);
+  const password = await bcrypt.hash(req.body.password, salt);
+  const {name, email} = req.body;
+  const user = new User({
+    name,
+   email: email.toLowerCase(),
+    password,
+  });
+ 
+  try {
+    const savedUser = await user.save();
 
-    const password = await bcrypt.hash(req.body.password, salt);
+    res.json({ error: null, data: { message: "User was registered successfully!", userId: savedUser._id } });
 
-    const user = new User({
-        name: req.body.name,
-        email: req.body.email,
-        password,
-    });
-    try {
-        const savedUser = await user.save();
-        res.json({ error: null, data: { userId: savedUser._id } });
-    } catch (error) {
-        res.status(400).json({ error });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.send({ status: 'error', error: 'email already exists. Please Login' })
     }
+    throw error
+  }
 }
 
-TOKEN_SECRET ='***'
+// Login Controller
 const loginController = async (req, res) => {
-
+  // const use = req.body;
   const { error } = loginValidation(req.body);
 
   if (error) return res.status(400).json({ error: error.details[0].message });
+  const user = await User.findOne({ email: req.body.email })
 
-  const user = await User.findOne({ email: req.body.email});
 
-  if (!user) return res.status(400).json({ error: "Email not found" });
+  if (!user) return res.status(400).json({ error: "Invalid email or password" });
 
   const validPassword = await bcrypt.compare(req.body.password, user.password);
 
+
   if (!validPassword)
-    return res.status(400).json({ error: "Password is wrong" });
+    return res.status(400).json({
+      message: "Invalid email or password",
+      error,
+    });
 
-  const token = jwt.sign(
-    {
-      name: user.name,
-      id: user._id,
-    },
-    TOKEN_SECRET,
+  const token = jwt.sign({
+    name: user.name,
+    id: user._id,
+  },
+    "RANDOM-TOKEN",
     { expiresIn: "24h" }
-  );
-
-  res.header("auth-token", token).json({
+  ); 
+  res.header("auth-token", token).send({
     error: null,
-    data: {
-      message: "Login Successful",
-      user,
-      token,
-    },
-  });
+    message: "Login Successful",
+    user,
+    token,
+})
 }
 
-
-
-module.exports = { registerController,loginController }
+module.exports = { registerController, loginController }
